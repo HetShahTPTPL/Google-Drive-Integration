@@ -29,9 +29,6 @@ codeunit 50201 "Google Drive Attachment Mgt"
 
         GDUpload.CreateAttachmentMapping(Rec, GoogleFileId, DriveUrl);
 
-        SalesHeader."Google Drive URL" := CopyStr(DriveUrl, 1, MaxStrLen(SalesHeader."Google Drive URL"));
-        SalesHeader.Modify(false);
-
         Message('File "%1.%2" uploaded successfully to Google Drive.\URL: %3', Rec."File Name", Rec."File Extension", DriveUrl);
     end;
 
@@ -75,17 +72,6 @@ codeunit 50201 "Google Drive Attachment Mgt"
         if GoogleAttachment.Get(Rec.ID) then begin
             GDUpload.DeleteFileFromDrive(GoogleAttachment."Google File ID");
             GoogleAttachment.Delete();
-        end;
-
-        if Rec."Table ID" = Database::"Sales Header" then begin
-            if SalesHeader.Get(SalesHeader."Document Type"::Order, Rec."No.") then begin
-                GoogleAttachment.SetRange("Table ID", Rec."Table ID");
-                GoogleAttachment.SetRange("Document No.", Rec."No.");
-                if GoogleAttachment.IsEmpty() then begin
-                    SalesHeader."Google Drive URL" := '';
-                    SalesHeader.Modify(false);
-                end;
-            end;
         end;
     end;
 }
