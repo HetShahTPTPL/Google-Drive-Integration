@@ -12,7 +12,7 @@ codeunit 50200 "Google Drive Upload"
         JsonResp: JsonObject;
         TokenToken: JsonToken;
     begin
-        if not Setup.Get('') then
+        if not Setup.Get() then
             Error('Google Drive Setup not configured.');
 
         Body := StrSubstNo(
@@ -103,7 +103,7 @@ codeunit 50200 "Google Drive Upload"
         Headers: HttpHeaders;
         Body: Text;
     begin
-        Setup.Get('');
+        Setup.Get();
 
         Body := StrSubstNo('{"name":"%1"}', FileName);
 
