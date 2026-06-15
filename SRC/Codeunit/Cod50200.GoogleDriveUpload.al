@@ -44,7 +44,7 @@ codeunit 50200 "Google Drive Upload"
         exit(TokenToken.AsValue().AsText());
     end;
 
-    procedure UploadFileToDrive(FileName: Text; MimeType: Text; FileContent: InStream): Text
+    procedure UploadFileToDrive(FileName: Text; MimeType: Text; FileContent: InStream; var GoogleFileId: Text): Text
     var
         AccessToken: Text;
         Client: HttpClient;
@@ -90,7 +90,9 @@ codeunit 50200 "Google Drive Upload"
 
         UpdateFileMetadata(IdToken.AsValue().AsText(), FileName);
 
-        exit('https://drive.google.com/file/d/' + IdToken.AsValue().AsText() + '/view');
+        GoogleFileId := IdToken.AsValue().AsText();
+
+        exit('https://drive.google.com/file/d/' + GoogleFileId + '/view');
     end;
 
     local procedure UpdateFileMetadata(FileId: Text; FileName: Text)
@@ -129,5 +131,57 @@ codeunit 50200 "Google Drive Upload"
 
         if not Response.IsSuccessStatusCode() then
             Error('Metadata update failed: %1', Body);
+    end;
+
+    procedure DeleteFileFromDrive(FileId: Text)
+    var
+        Client: HttpClient;
+        Request: HttpRequestMessage;
+        Response: HttpResponseMessage;
+        Headers: HttpHeaders;
+        ResponseText: Text;
+    begin
+        Request.Method := 'DELETE';
+
+        Request.SetRequestUri('https://www.googleapis.com/drive/v3/files/' + FileId);
+
+        Request.GetHeaders(Headers);
+        Headers.Add('Authorization', 'Bearer ' + GetAccessToken());
+
+        if not Client.Send(Request, Response) then
+            Error('Failed to reach Google Drive.');
+
+        Response.Content.ReadAs(ResponseText);
+
+        if not Response.IsSuccessStatusCode() then
+            Error('Failed to delete file from Google Drive. Status: %1\Response: %2', Response.HttpStatusCode(), ResponseText);
+    end;
+
+    procedure CreateAttachmentMapping(DocumentAttachment: Record "Document Attachment"; GoogleFileId: Text; DriveUrl: Text)
+    var
+        GoogleAttachment: Record "Google Drive Attachment";
+    begin
+        if GoogleAttachment.Get(DocumentAttachment.ID) then
+            exit;
+
+        GoogleAttachment.Init();
+        GoogleAttachment."Attachment ID" := DocumentAttachment.ID;
+        GoogleAttachment."Table ID" := DocumentAttachment."Table ID";
+        GoogleAttachment."Document No." := DocumentAttachment."No.";
+        GoogleAttachment."Document Type" := DocumentAttachment."Document Type".AsInteger();
+        GoogleAttachment."File Name" := DocumentAttachment."File Name" + '.' + DocumentAttachment."File Extension";
+        GoogleAttachment."Google File ID" := GoogleFileId;
+        GoogleAttachment."Google Drive URL" := DriveUrl;
+        GoogleAttachment."Uploaded DateTime" := CurrentDateTime();
+        GoogleAttachment."Uploaded By" := UserSecurityId();
+        GoogleAttachment.Insert();
+    end;
+
+    procedure DeleteAttachmentMapping(AttachmentId: Integer)
+    var
+        GoogleAttachment: Record "Google Drive Attachment";
+    begin
+        if GoogleAttachment.Get(AttachmentId) then
+            GoogleAttachment.Delete();
     end;
 }

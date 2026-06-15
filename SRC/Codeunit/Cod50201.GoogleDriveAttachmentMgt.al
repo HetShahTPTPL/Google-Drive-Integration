@@ -9,40 +9,30 @@ codeunit 50201 "Google Drive Attachment Mgt"
         GDUpload: Codeunit "Google Drive Upload";
         DriveUrl: Text;
         MimeType: Text;
+        GoogleFileId: Text;
     begin
-        // Only Sales Orders
         if Rec."Table ID" <> Database::"Sales Header" then
             exit;
 
         if not SalesHeader.Get(SalesHeader."Document Type"::Order, Rec."No.") then
             exit;
 
-        // Ensure attachment exists
         if not Rec.HasContent() then
             exit;
 
-        // Get attachment content
         Rec.GetAsTempBlob(TempBlob);
         TempBlob.CreateInStream(FileStream);
 
         MimeType := GetMimeType(Rec."File Extension");
 
-        // Upload to Google Drive
-        DriveUrl :=
-            GDUpload.UploadFileToDrive(
-                Rec."File Name" + '.' + Rec."File Extension",
-                MimeType,
-                FileStream);
+        DriveUrl := GDUpload.UploadFileToDrive(Rec."File Name" + '.' + Rec."File Extension", MimeType, FileStream, GoogleFileId);
 
-        // Save URL on Sales Order
+        GDUpload.CreateAttachmentMapping(Rec, GoogleFileId, DriveUrl);
+
         SalesHeader."Google Drive URL" := CopyStr(DriveUrl, 1, MaxStrLen(SalesHeader."Google Drive URL"));
-        SalesHeader.Modify();
+        SalesHeader.Modify(false);
 
-        Message(
-            'File "%1.%2" uploaded successfully to Google Drive.\URL: %3',
-            Rec."File Name",
-            Rec."File Extension",
-            DriveUrl);
+        Message('File "%1.%2" uploaded successfully to Google Drive.\URL: %3', Rec."File Name", Rec."File Extension", DriveUrl);
     end;
 
     local procedure GetMimeType(Extension: Text): Text
@@ -72,6 +62,30 @@ codeunit 50201 "Google Drive Attachment Mgt"
                 exit('text/csv');
             else
                 exit('application/octet-stream');
+        end;
+    end;
+
+    [EventSubscriber(ObjectType::Table, Database::"Document Attachment", 'OnAfterDeleteEvent', '', false, false)]
+    local procedure OnDocumentAttachmentDeleted(var Rec: Record "Document Attachment"; RunTrigger: Boolean)
+    var
+        GoogleAttachment: Record "Google Drive Attachment";
+        GDUpload: Codeunit "Google Drive Upload";
+        SalesHeader: Record "Sales Header";
+    begin
+        if GoogleAttachment.Get(Rec.ID) then begin
+            GDUpload.DeleteFileFromDrive(GoogleAttachment."Google File ID");
+            GoogleAttachment.Delete();
+        end;
+
+        if Rec."Table ID" = Database::"Sales Header" then begin
+            if SalesHeader.Get(SalesHeader."Document Type"::Order, Rec."No.") then begin
+                GoogleAttachment.SetRange("Table ID", Rec."Table ID");
+                GoogleAttachment.SetRange("Document No.", Rec."No.");
+                if GoogleAttachment.IsEmpty() then begin
+                    SalesHeader."Google Drive URL" := '';
+                    SalesHeader.Modify(false);
+                end;
+            end;
         end;
     end;
 }
